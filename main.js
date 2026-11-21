@@ -50,6 +50,7 @@ async function initializeViewer() {
     await renderFigure(createPreviewFigure());
   } catch (error) {
     statusBox.textContent = 'プレビューの表示に失敗しました。';
+    document.querySelector('#generate-btn').disabled = true;
     console.error(error);
     return;
   }
