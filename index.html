@@ -32,7 +32,8 @@
     </div>
   </aside>
   <main class="workspace" aria-label="3Dビューア">
-    <div id="viewer"></div>
+    <div id="viewer" role="region" aria-label="立方体プレビュー" aria-describedby="preview-description"></div>
+    <p id="preview-description" hidden>一辺30 mmの立方体です。X・Y・Z軸の範囲はいずれも0〜30 mmです。</p>
     <div class="toolbar" role="group" aria-label="カメラ操作">
       <button type="button" id="projection" disabled>平行投影</button>
       <button type="button" data-view="x" disabled>+X 視点</button>
