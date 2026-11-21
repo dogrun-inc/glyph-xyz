@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>glyph-xyz</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" defer></script>
+  <script src="main.js" defer></script>
+</head>
+<body>
+  <aside class="controls" aria-label="生成設定">
+    <h1>glyph-xyz</h1>
+    <div class="axes">
+      <label>X軸 <input type="text" maxlength="1" value="G"></label>
+      <label>Y軸 <input type="text" maxlength="1" value="E"></label>
+      <label>Z軸 <input type="text" maxlength="1" value="B"></label>
+    </div>
+    <label>基準サイズ（mm）
+      <input type="number" value="30" min="5" max="200" required>
+    </label>
+    <label>フォント
+      <input type="file" accept=".ttf,.otf" aria-describedby="font-help">
+    </label>
+    <small id="font-help">未選択の場合はデフォルトフォントを使用します。</small>
+    <button type="button" id="generate-btn">立体を生成</button>
+    <div id="status" class="status" role="status">準備完了（プレビュー表示中）</div>
+    <div id="parts-warning" role="alert" hidden></div>
+    <div class="exports">
+      <button type="button" disabled>STL ダウンロード</button>
+      <button type="button" disabled>STEP ダウンロード</button>
+    </div>
+  </aside>
+  <main class="workspace" aria-label="3Dビューア">
+    <div id="viewer"></div>
+    <div class="toolbar" role="group" aria-label="カメラ操作">
+      <button type="button" id="projection" disabled>平行投影</button>
+      <button type="button" data-view="x" disabled>+X 視点</button>
+      <button type="button" data-view="y" disabled>-Y 視点</button>
+      <button type="button" data-view="z" disabled>+Z 視点</button>
+      <button type="button" data-view="iso" disabled>斜め視点</button>
+    </div>
+  </main>
+</body>
+</html>
