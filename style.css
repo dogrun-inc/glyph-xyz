@@ -1,0 +1,92 @@
+:root {
+  font: 15px/1.5 system-ui, sans-serif;
+  color: #202b3b;
+  background: #eef2f7;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  height: 100vh;
+  margin: 0;
+}
+
+.controls {
+  padding: 24px;
+  overflow: auto;
+  background: #fff;
+  border-right: 1px solid #d5deea;
+}
+
+h1 { margin: 0 0 24px; }
+
+.axes, .exports {
+  display: grid;
+  gap: 8px;
+}
+
+.axes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.exports { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.controls > label { display: block; margin-top: 16px; }
+
+input, button {
+  font: inherit;
+  color: inherit;
+  border: 1px solid #adbcd0;
+  border-radius: 6px;
+}
+
+input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 7px;
+}
+
+.axes input { text-align: center; }
+small { display: block; margin-top: 6px; }
+
+button {
+  padding: 7px 11px;
+  background: #fff;
+  cursor: pointer;
+}
+
+button:disabled {
+  color: #59677a;
+  background: #eef2f7;
+  cursor: default;
+}
+
+#generate-btn {
+  width: 100%;
+  margin-top: 20px;
+  color: #fff;
+  background: #2456a6;
+  border-color: #2456a6;
+}
+
+.status {
+  margin: 12px 0;
+  padding: 10px;
+  border-radius: 6px;
+  background: #eef2f7;
+}
+
+.workspace { position: relative; min-height: 0; }
+#viewer { width: 100%; height: 100%; }
+
+.toolbar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.toolbar button { pointer-events: auto; }
