@@ -93,7 +93,7 @@ function initializeWorker() {
   function failWorker(message) {
     workerReady = false;
     generateButton.disabled = true;
-    console.error(message);
+    statusBox.textContent = message;
     worker?.terminate();
   }
 
@@ -115,6 +115,7 @@ function initializeWorker() {
         return;
       }
       if (!(await viewerReady)) return;
+      statusBox.textContent = data.message;
       workerReady = data.status === 'ready';
       generateButton.disabled = !workerReady;
       return;
@@ -122,12 +123,14 @@ function initializeWorker() {
 
     try {
       if (data.type === 'error') {
-        console.error(data.message);
+        statusBox.textContent = data.message;
       } else if (data.type === 'result') {
         await renderFigure(JSON.parse(data.figureJson));
         previewDescription.textContent = `一辺 ${size} mm のブロックです。Z 軸方向に直径 ${size / 2} mm の貫通穴があります。`;
+        statusBox.textContent = 'テスト立体を表示しました。';
       }
     } catch (error) {
+      statusBox.textContent = 'テスト立体の表示に失敗しました。';
       console.error(error);
     } finally {
       generateButton.disabled = !workerReady;
@@ -138,6 +141,7 @@ function initializeWorker() {
     if (!workerReady || generateButton.disabled || !sizeInput.reportValidity()) return;
     size = sizeInput.valueAsNumber;
     generateButton.disabled = true;
+    statusBox.textContent = 'CAD ジオメトリを計算中...';
     worker.postMessage({ type: 'generate', payload: { size } });
   });
 }
