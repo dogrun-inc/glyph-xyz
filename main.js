@@ -1,4 +1,5 @@
 const statusBox = document.querySelector('#status');
+const viewer = document.querySelector('#viewer');
 const previewDescription = document.querySelector('#preview-description');
 const generateButton = document.querySelector('#generate-btn');
 const sizeInput = document.querySelector('#size');
@@ -15,8 +16,13 @@ const views = {
 
 let projection = 'orthographic';
 
-function renderFigure(figureJson) {
-  return Plotly.react('viewer', figureJson.data, figureJson.layout, { responsive: true });
+function renderFigure({ data, layout }) {
+  const scene = layout.scene;
+  const camera = viewer.layout?.scene?.camera ?? scene.camera;
+  return Plotly.react(viewer, data, {
+    ...layout,
+    scene: { ...scene, camera: { ...camera, projection: { type: projection } } },
+  }, { responsive: true });
 }
 
 function createPreviewFigure() {
@@ -35,6 +41,7 @@ function createPreviewFigure() {
     }],
     layout: {
       autosize: true,
+      uirevision: 'constant',
       paper_bgcolor: '#eef2f7',
       margin: { l: 0, r: 0, t: 56, b: 0 },
       scene: {
