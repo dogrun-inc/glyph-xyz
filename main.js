@@ -1,4 +1,7 @@
 const statusBox = document.querySelector('#status');
+const previewDescription = document.querySelector('#preview-description');
+const generateButton = document.querySelector('#generate-btn');
+const sizeInput = document.querySelector('#size');
 const projectionButton = document.querySelector('#projection');
 const viewButtons = document.querySelectorAll('[data-view]');
 
@@ -50,9 +53,8 @@ async function initializeViewer() {
     await renderFigure(createPreviewFigure());
   } catch (error) {
     statusBox.textContent = 'プレビューの表示に失敗しました。';
-    document.querySelector('#generate-btn').disabled = true;
     console.error(error);
-    return;
+    return false;
   }
 
   projectionButton.disabled = false;
@@ -79,10 +81,65 @@ async function initializeViewer() {
       });
     });
   }
+  return true;
 }
 
-document.querySelector('#generate-btn').addEventListener('click', () => {
-  statusBox.textContent = '現在は立方体のプレビューを表示しています。';
-});
+function initializeWorker() {
+  const viewerReady = initializeViewer();
+  let worker;
+  let workerReady = false;
+  let size;
 
-initializeViewer();
+  function failWorker(message) {
+    workerReady = false;
+    generateButton.disabled = true;
+    console.error(message);
+    worker?.terminate();
+  }
+
+  try {
+    worker = new Worker('./worker.js');
+  } catch (error) {
+    failWorker(`Worker の起動に失敗しました。 ${error.message}`);
+    return;
+  }
+
+  worker.addEventListener('error', (event) => {
+    failWorker(`Worker の実行に失敗しました。 ${event.message}`);
+  });
+
+  worker.addEventListener('message', async ({ data }) => {
+    if (data.type === 'status') {
+      if (data.status === 'error') {
+        failWorker(data.message);
+        return;
+      }
+      if (!(await viewerReady)) return;
+      workerReady = data.status === 'ready';
+      generateButton.disabled = !workerReady;
+      return;
+    }
+
+    try {
+      if (data.type === 'error') {
+        console.error(data.message);
+      } else if (data.type === 'result') {
+        await renderFigure(JSON.parse(data.figureJson));
+        previewDescription.textContent = `一辺 ${size} mm のブロックです。Z 軸方向に直径 ${size / 2} mm の貫通穴があります。`;
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      generateButton.disabled = !workerReady;
+    }
+  });
+
+  generateButton.addEventListener('click', () => {
+    if (!workerReady || generateButton.disabled || !sizeInput.reportValidity()) return;
+    size = sizeInput.valueAsNumber;
+    generateButton.disabled = true;
+    worker.postMessage({ type: 'generate', payload: { size } });
+  });
+}
+
+initializeWorker();
