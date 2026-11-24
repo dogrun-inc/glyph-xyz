@@ -17,14 +17,14 @@
       <label>Z軸 <input type="text" maxlength="1" value="B"></label>
     </div>
     <label>基準サイズ（mm）
-      <input type="number" value="30" min="5" max="200" required>
+      <input id="size" type="number" value="30" min="5" max="200" step="any" required>
     </label>
     <label>フォント
       <input type="file" accept=".ttf,.otf" aria-describedby="font-help">
     </label>
     <small id="font-help">未選択の場合はデフォルトフォントを使用します。</small>
-    <button type="button" id="generate-btn">立体を生成</button>
-    <div id="status" class="status" role="status">準備完了（プレビュー表示中）</div>
+    <button type="button" id="generate-btn" disabled>立体を生成</button>
+    <div id="status" class="status" role="status">Pyodide を読み込み中...</div>
     <div id="parts-warning" role="alert" hidden></div>
     <div class="exports">
       <button type="button" disabled>STL ダウンロード</button>
@@ -32,7 +32,7 @@
     </div>
   </aside>
   <main class="workspace" aria-label="3Dビューア">
-    <div id="viewer" role="region" aria-label="立方体プレビュー" aria-describedby="preview-description"></div>
+    <div id="viewer" role="region" aria-label="立体プレビュー" aria-describedby="preview-description"></div>
     <p id="preview-description" hidden>一辺30 mmの立方体です。X・Y・Z軸の範囲はいずれも0〜30 mmです。</p>
     <div class="toolbar" role="group" aria-label="カメラ操作">
       <button type="button" id="projection" disabled>平行投影</button>

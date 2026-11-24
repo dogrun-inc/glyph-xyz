@@ -1,4 +1,8 @@
 const statusBox = document.querySelector('#status');
+const viewer = document.querySelector('#viewer');
+const previewDescription = document.querySelector('#preview-description');
+const generateButton = document.querySelector('#generate-btn');
+const sizeInput = document.querySelector('#size');
 const projectionButton = document.querySelector('#projection');
 const viewButtons = document.querySelectorAll('[data-view]');
 
@@ -12,8 +16,13 @@ const views = {
 
 let projection = 'orthographic';
 
-function renderFigure(figureJson) {
-  return Plotly.react('viewer', figureJson.data, figureJson.layout, { responsive: true });
+function renderFigure({ data, layout }) {
+  const scene = layout.scene;
+  const camera = viewer.layout?.scene?.camera ?? scene.camera;
+  return Plotly.react(viewer, data, {
+    ...layout,
+    scene: { ...scene, camera: { ...camera, projection: { type: projection } } },
+  }, { responsive: true });
 }
 
 function createPreviewFigure() {
@@ -32,6 +41,7 @@ function createPreviewFigure() {
     }],
     layout: {
       autosize: true,
+      uirevision: 'constant',
       paper_bgcolor: '#eef2f7',
       margin: { l: 0, r: 0, t: 56, b: 0 },
       scene: {
@@ -50,9 +60,8 @@ async function initializeViewer() {
     await renderFigure(createPreviewFigure());
   } catch (error) {
     statusBox.textContent = 'プレビューの表示に失敗しました。';
-    document.querySelector('#generate-btn').disabled = true;
     console.error(error);
-    return;
+    return false;
   }
 
   projectionButton.disabled = false;
@@ -79,10 +88,70 @@ async function initializeViewer() {
       });
     });
   }
+  return true;
 }
 
-document.querySelector('#generate-btn').addEventListener('click', () => {
-  statusBox.textContent = '現在は立方体のプレビューを表示しています。';
-});
+function initializeWorker() {
+  const viewerReady = initializeViewer();
+  let worker;
+  let workerReady = false;
+  let size;
 
-initializeViewer();
+  function failWorker(message) {
+    workerReady = false;
+    generateButton.disabled = true;
+    statusBox.textContent = message;
+    worker?.terminate();
+    worker = null;
+  }
+
+  try {
+    worker = new Worker('./worker.js');
+  } catch (error) {
+    failWorker(`Worker の起動に失敗しました。 ${error.message}`);
+    return;
+  }
+
+  worker.addEventListener('error', (event) => {
+    failWorker(`Worker の実行に失敗しました。 ${event.message}`);
+  });
+
+  worker.addEventListener('message', async ({ data }) => {
+    if (data.type === 'status') {
+      if (data.status === 'error') {
+        failWorker(data.message);
+        return;
+      }
+      if (!(await viewerReady) || !worker) return;
+      statusBox.textContent = data.message;
+      workerReady = data.status === 'ready';
+      generateButton.disabled = !workerReady;
+      return;
+    }
+
+    try {
+      if (data.type === 'error') {
+        statusBox.textContent = data.message;
+      } else if (data.type === 'result') {
+        await renderFigure(JSON.parse(data.figureJson));
+        previewDescription.textContent = `一辺 ${size} mm のブロックです。Z 軸方向に直径 ${size / 2} mm の貫通穴があります。`;
+        statusBox.textContent = 'テスト立体を表示しました。';
+      }
+    } catch (error) {
+      statusBox.textContent = 'テスト立体の表示に失敗しました。';
+      console.error(error);
+    } finally {
+      generateButton.disabled = !workerReady;
+    }
+  });
+
+  generateButton.addEventListener('click', () => {
+    if (!workerReady || generateButton.disabled || !sizeInput.reportValidity()) return;
+    size = sizeInput.valueAsNumber;
+    generateButton.disabled = true;
+    statusBox.textContent = 'CAD ジオメトリを計算中...';
+    worker.postMessage({ type: 'generate', payload: { size } });
+  });
+}
+
+initializeWorker();
