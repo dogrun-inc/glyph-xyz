@@ -102,6 +102,7 @@ function initializeWorker() {
     generateButton.disabled = true;
     statusBox.textContent = message;
     worker?.terminate();
+    worker = null;
   }
 
   try {
@@ -121,7 +122,7 @@ function initializeWorker() {
         failWorker(data.message);
         return;
       }
-      if (!(await viewerReady)) return;
+      if (!(await viewerReady) || !worker) return;
       statusBox.textContent = data.message;
       workerReady = data.status === 'ready';
       generateButton.disabled = !workerReady;
