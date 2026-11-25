@@ -54,6 +54,7 @@ def generate_figure(size):
     )
     return fig.to_json()
 `);
+    runtime.FS.mkdir('/fonts');
     pyodide = runtime;
     self.postMessage({ type: 'status', status: 'ready', message: '準備完了。テスト立体を生成できます。' });
   } catch (error) {
@@ -68,10 +69,15 @@ self.addEventListener('message', ({ data }) => {
 
   try {
     if (!pyodide) throw new Error('CAD エンジンは準備中です。');
-    const size = data.payload?.size;
+    const { size, fontBuffer, fontKind } = data.payload;
     if (!Number.isFinite(size) || size < 5 || size > 200) {
       throw new Error('基準サイズは 5〜200 mm で入力してください。');
     }
+
+    const fontPath = fontKind === 'default'
+      ? '/fonts/default.ttf'
+      : fontKind === 'otf' ? '/fonts/custom.otf' : '/fonts/custom.ttf';
+    pyodide.FS.writeFile(fontPath, new Uint8Array(fontBuffer));
 
     const generateFigure = pyodide.globals.get('generate_figure');
     try {

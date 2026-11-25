@@ -97,6 +97,27 @@ function setGenerationLocked(locked) {
   fontInput.disabled = locked;
 }
 
+async function readFont(file) {
+  if (file) {
+    const extension = file.name.split('.').pop().toLowerCase();
+    if (!/\.(ttf|otf)$/i.test(file.name)) {
+      throw new Error('拡張子が .ttf または .otf のフォントを選択してください。');
+    }
+    return { fontBuffer: await file.arrayBuffer(), fontKind: extension };
+  }
+
+  try {
+    const response = await fetch('./fonts/default.ttf');
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return { fontBuffer: await response.arrayBuffer(), fontKind: 'default' };
+  } catch (error) {
+    throw new Error(
+      'デフォルトフォント（fonts/default.ttf）が見つかりません。フォントファイルを選択するか、fonts/default.ttf を配置してください',
+      { cause: error },
+    );
+  }
+}
+
 const viewerReady = initializeViewer();
 let worker = null;
 let size;
@@ -159,7 +180,7 @@ function initializeWorker() {
   });
 }
 
-generateButton.addEventListener('click', () => {
+generateButton.addEventListener('click', async () => {
   if (generateButton.disabled || !sizeInput.reportValidity()) return;
   if (!worker) {
     initializeWorker();
@@ -169,9 +190,13 @@ generateButton.addEventListener('click', () => {
   const activeWorker = worker;
   size = sizeInput.valueAsNumber;
   setGenerationLocked(true);
+  statusBox.textContent = 'フォントを読み込み中...';
+
   try {
+    const { fontBuffer, fontKind } = await readFont(fontInput.files[0]);
+    if (worker !== activeWorker) return;
     statusBox.textContent = 'CAD ジオメトリを計算中...';
-    activeWorker.postMessage({ type: 'generate', payload: { size } });
+    activeWorker.postMessage({ type: 'generate', payload: { size, fontBuffer, fontKind } }, [fontBuffer]);
   } catch (error) {
     if (worker !== activeWorker) return;
     statusBox.textContent = error.message;
