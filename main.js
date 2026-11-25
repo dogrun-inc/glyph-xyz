@@ -2,6 +2,7 @@ const statusBox = document.querySelector('#status');
 const viewer = document.querySelector('#viewer');
 const previewDescription = document.querySelector('#preview-description');
 const generateButton = document.querySelector('#generate-btn');
+const fontInput = document.querySelector('#font');
 const sizeInput = document.querySelector('#size');
 const projectionButton = document.querySelector('#projection');
 const viewButtons = document.querySelectorAll('[data-view]');
@@ -91,18 +92,24 @@ async function initializeViewer() {
   return true;
 }
 
+function setGenerationLocked(locked) {
+  generateButton.disabled = locked;
+  fontInput.disabled = locked;
+}
+
+const viewerReady = initializeViewer();
+let worker = null;
+let size;
+
 function initializeWorker() {
-  const viewerReady = initializeViewer();
-  let worker;
-  let workerReady = false;
-  let size;
+  setGenerationLocked(true);
+  statusBox.textContent = 'Pyodide を読み込み中...';
 
   function failWorker(message) {
-    workerReady = false;
-    generateButton.disabled = true;
-    statusBox.textContent = message;
     worker?.terminate();
     worker = null;
+    statusBox.textContent = message;
+    setGenerationLocked(false);
   }
 
   try {
@@ -112,20 +119,26 @@ function initializeWorker() {
     return;
   }
 
-  worker.addEventListener('error', (event) => {
-    failWorker(`Worker の実行に失敗しました。 ${event.message}`);
+  const activeWorker = worker;
+  activeWorker.addEventListener('error', (event) => {
+    if (worker === activeWorker) failWorker(`Worker の実行に失敗しました。 ${event.message}`);
   });
 
-  worker.addEventListener('message', async ({ data }) => {
+  activeWorker.addEventListener('message', async ({ data }) => {
+    if (worker !== activeWorker) return;
     if (data.type === 'status') {
       if (data.status === 'error') {
         failWorker(data.message);
         return;
       }
-      if (!(await viewerReady) || !worker) return;
-      statusBox.textContent = data.message;
-      workerReady = data.status === 'ready';
-      generateButton.disabled = !workerReady;
+      if (data.status === 'ready') {
+        const ready = await viewerReady;
+        if (worker !== activeWorker) return;
+        statusBox.textContent = ready ? data.message : 'プレビューの表示に失敗しました。';
+        setGenerationLocked(false);
+      } else {
+        statusBox.textContent = data.message;
+      }
       return;
     }
 
@@ -141,17 +154,29 @@ function initializeWorker() {
       statusBox.textContent = 'テスト立体の表示に失敗しました。';
       console.error(error);
     } finally {
-      generateButton.disabled = !workerReady;
+      if (worker === activeWorker) setGenerationLocked(false);
     }
   });
-
-  generateButton.addEventListener('click', () => {
-    if (!workerReady || generateButton.disabled || !sizeInput.reportValidity()) return;
-    size = sizeInput.valueAsNumber;
-    generateButton.disabled = true;
-    statusBox.textContent = 'CAD ジオメトリを計算中...';
-    worker.postMessage({ type: 'generate', payload: { size } });
-  });
 }
+
+generateButton.addEventListener('click', () => {
+  if (generateButton.disabled || !sizeInput.reportValidity()) return;
+  if (!worker) {
+    initializeWorker();
+    return;
+  }
+
+  const activeWorker = worker;
+  size = sizeInput.valueAsNumber;
+  setGenerationLocked(true);
+  try {
+    statusBox.textContent = 'CAD ジオメトリを計算中...';
+    activeWorker.postMessage({ type: 'generate', payload: { size } });
+  } catch (error) {
+    if (worker !== activeWorker) return;
+    statusBox.textContent = error.message;
+    setGenerationLocked(false);
+  }
+});
 
 initializeWorker();

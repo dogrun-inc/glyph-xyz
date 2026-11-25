@@ -54,18 +54,24 @@ button {
   cursor: pointer;
 }
 
-button:disabled {
-  color: #59677a;
-  background: #eef2f7;
-  cursor: default;
-}
-
 #generate-btn {
   width: 100%;
   margin-top: 20px;
+}
+
+#generate-btn:enabled {
   color: #fff;
   background: #2456a6;
   border-color: #2456a6;
+}
+
+button:disabled,
+input[type="file"]:disabled,
+input[type="file"]:disabled::file-selector-button {
+  color: #627083;
+  background: #e3e7ec;
+  border-color: #c3cad4;
+  cursor: not-allowed;
 }
 
 .status {
