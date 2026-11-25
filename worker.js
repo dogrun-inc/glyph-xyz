@@ -22,13 +22,26 @@ micropip.add_mock_package(
     "py-lib3mf", "2.4.1", modules={"py_lib3mf": "from lib3mf import *"}
 )
 await micropip.install(["build123d==0.11.0", "sqlite3"])
-from build123d import Box, Cylinder
+from build123d import Align, Box, Cylinder, Text, extrude, scale
 `);
 
     self.postMessage({ type: 'status', status: 'loading', message: 'plotly をインストール中...' });
     await runtime.runPythonAsync(`
 await micropip.install("plotly==5.24.1")
 import plotly.graph_objects as go
+
+def glyph_prism(char, size, font_path, plane):
+    txt = Text(char, font_size=size, font_path=font_path, align=(Align.CENTER, Align.CENTER))
+    if not txt.faces():
+        raise ValueError(f"文字「{char}」の輪郭を生成できませんでした。")
+    bbox = txt.bounding_box()
+    if bbox.size.X <= 0 or bbox.size.Y <= 0:
+        raise ValueError(f"文字「{char}」の輪郭に幅または高さがありません。")
+    centered = txt.translate(-bbox.center())
+    normalized = scale(
+        centered, by=(size / bbox.size.X, size / bbox.size.Y, 1.0), about=(0, 0, 0)
+    )
+    return extrude(plane * normalized, amount=size * 0.6, both=True)
 
 def generate_figure(size):
     shape = Box(size, size, size) - Cylinder(size * 0.25, size * 2)
