@@ -3,6 +3,8 @@ const viewer = document.querySelector('#viewer');
 const previewDescription = document.querySelector('#preview-description');
 const generateButton = document.querySelector('#generate-btn');
 const fontInput = document.querySelector('#font');
+const glyphInputs = ['x', 'y', 'z'].map((axis) => document.querySelector(`#glyph-${axis}`));
+const partsWarning = document.querySelector('#parts-warning');
 const sizeInput = document.querySelector('#size');
 const projectionButton = document.querySelector('#projection');
 const viewButtons = document.querySelectorAll('[data-view]');
@@ -120,7 +122,6 @@ async function readFont(file) {
 
 const viewerReady = initializeViewer();
 let worker = null;
-let size;
 
 function initializeWorker() {
   setGenerationLocked(true);
@@ -168,11 +169,17 @@ function initializeWorker() {
         statusBox.textContent = data.message;
       } else if (data.type === 'result') {
         await renderFigure(JSON.parse(data.figureJson));
-        previewDescription.textContent = `一辺 ${size} mm のブロックです。Z 軸方向に直径 ${size / 2} mm の貫通穴があります。`;
-        statusBox.textContent = 'テスト立体を表示しました。';
+        const [x, y, z] = data.chars;
+        previewDescription.textContent = `基準サイズ ${data.size} mm。X軸は「${x}」、Y軸は「${y}」、Z軸は「${z}」です。`;
+        const hasMultipleParts = data.solidsCount > 1;
+        partsWarning.textContent = hasMultipleParts
+          ? `立体が ${data.solidsCount} 個のパーツに分断されています。太字のフォントや別の文字の組み合わせを試してください`
+          : '';
+        partsWarning.hidden = !hasMultipleParts;
+        statusBox.textContent = '立体を表示しました。';
       }
     } catch (error) {
-      statusBox.textContent = 'テスト立体の表示に失敗しました。';
+      statusBox.textContent = '立体の表示に失敗しました。';
       console.error(error);
     } finally {
       if (worker === activeWorker) setGenerationLocked(false);
@@ -188,7 +195,8 @@ generateButton.addEventListener('click', async () => {
   }
 
   const activeWorker = worker;
-  size = sizeInput.valueAsNumber;
+  const size = sizeInput.valueAsNumber;
+  const glyphs = glyphInputs.map((input) => input.value);
   setGenerationLocked(true);
   statusBox.textContent = 'フォントを読み込み中...';
 
@@ -196,7 +204,7 @@ generateButton.addEventListener('click', async () => {
     const { fontBuffer, fontKind } = await readFont(fontInput.files[0]);
     if (worker !== activeWorker) return;
     statusBox.textContent = 'CAD ジオメトリを計算中...';
-    activeWorker.postMessage({ type: 'generate', payload: { size, fontBuffer, fontKind } }, [fontBuffer]);
+    activeWorker.postMessage({ type: 'generate', payload: { size, glyphs, fontBuffer, fontKind } }, [fontBuffer]);
   } catch (error) {
     if (worker !== activeWorker) return;
     statusBox.textContent = error.message;

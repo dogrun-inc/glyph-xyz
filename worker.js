@@ -22,12 +22,13 @@ micropip.add_mock_package(
     "py-lib3mf", "2.4.1", modules={"py_lib3mf": "from lib3mf import *"}
 )
 await micropip.install(["build123d==0.11.0", "sqlite3"])
-from build123d import Align, Box, Cylinder, Text, extrude, scale
+from build123d import Align, Plane, Text, extrude, scale
 `);
 
     self.postMessage({ type: 'status', status: 'loading', message: 'plotly をインストール中...' });
     await runtime.runPythonAsync(`
 await micropip.install("plotly==5.24.1")
+import json
 import plotly.graph_objects as go
 
 def glyph_prism(char, size, font_path, plane):
@@ -43,14 +44,23 @@ def glyph_prism(char, size, font_path, plane):
     )
     return extrude(plane * normalized, amount=size * 0.6, both=True)
 
-def generate_figure(size):
-    shape = Box(size, size, size) - Cylinder(size * 0.25, size * 2)
-    verts, triangles = shape.tessellate(tolerance=0.1)
+def generate_figure(size, x_char, y_char, z_char, font_path):
+    prism_x = glyph_prism(x_char, size, font_path, Plane.YZ)
+    prism_y = glyph_prism(y_char, size, font_path, Plane.XZ)
+    prism_z = glyph_prism(z_char, size, font_path, Plane.XY)
+    xy = prism_x & prism_y
+    result = xy & prism_z if xy and xy.solids() else None
+    solids_count = len(result.solids()) if result else 0
+    if solids_count == 0:
+        return json.dumps({"error": "共通部分が存在しないため立体を生成できませんでした"})
+
+    verts, triangles = result.tessellate(tolerance=0.1)
     x, y, z = zip(*(tuple(vertex) for vertex in verts))
     i, j, k = zip(*triangles)
     fig = go.Figure(go.Mesh3d(
         x=x, y=y, z=z, i=i, j=j, k=k,
         color="#4684cf", flatshading=True, hoverinfo="skip",
+        lighting=dict(ambient=0.6, diffuse=0.8, specular=0.15, roughness=0.8, fresnel=0.05),
     ))
     fig.update_layout(
         scene=dict(
@@ -65,11 +75,11 @@ def generate_figure(size):
         paper_bgcolor="#eef2f7",
         template=None,
     )
-    return fig.to_json()
+    return json.dumps({"figureJson": fig.to_json(), "solidsCount": solids_count})
 `);
     runtime.FS.mkdir('/fonts');
     pyodide = runtime;
-    self.postMessage({ type: 'status', status: 'ready', message: '準備完了。テスト立体を生成できます。' });
+    self.postMessage({ type: 'status', status: 'ready', message: '準備完了。立体を生成できます。' });
   } catch (error) {
     self.postMessage({
       type: 'status', status: 'error', message: `初期化に失敗しました。 ${error.message}`,
@@ -82,11 +92,16 @@ self.addEventListener('message', ({ data }) => {
 
   try {
     if (!pyodide) throw new Error('CAD エンジンは準備中です。');
-    const { size, fontBuffer, fontKind } = data.payload;
+    const { size, glyphs, fontBuffer, fontKind } = data.payload;
     if (!Number.isFinite(size) || size < 5 || size > 200) {
       throw new Error('基準サイズは 5〜200 mm で入力してください。');
     }
 
+    const chars = ['X', 'Y', 'Z'].map((axis, index) => {
+      const [char] = (glyphs[index] ?? '').trimStart();
+      if (!char) throw new Error(`${axis}軸の文字を入力してください。`);
+      return char;
+    });
     const fontPath = fontKind === 'default'
       ? '/fonts/default.ttf'
       : fontKind === 'otf' ? '/fonts/custom.otf' : '/fonts/custom.ttf';
@@ -94,8 +109,12 @@ self.addEventListener('message', ({ data }) => {
 
     const generateFigure = pyodide.globals.get('generate_figure');
     try {
-      const figureJson = generateFigure(size);
-      self.postMessage({ type: 'result', figureJson });
+      const { error, figureJson, solidsCount } = JSON.parse(generateFigure(size, ...chars, fontPath));
+      if (error) {
+        self.postMessage({ type: 'error', message: error });
+      } else {
+        self.postMessage({ type: 'result', figureJson, solidsCount, chars, size });
+      }
     } finally {
       generateFigure.destroy();
     }
