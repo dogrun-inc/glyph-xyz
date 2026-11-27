@@ -125,6 +125,11 @@ def glyph_prism(char, size, txt, plane):
 
 async def generate_figure(size, x_char, y_char, z_char, font_path):
     chars = (x_char, y_char, z_char)
+    with TTFont(font_path) as font:
+        cmap = font.getBestCmap() or {}
+        for char in dict.fromkeys(chars):
+            if cmap.get(ord(char)) is None:
+                raise ValueError(f"フォントに文字「{char}」が含まれていません。")
     sketches = [text_sketch(char, size, font_path) for char in chars]
     if any(not sketch.is_valid for sketch in sketches if sketch.faces()):
         # Other glyphs in the same font can have overlapping faces that each pass is_valid.
