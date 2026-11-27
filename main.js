@@ -2,6 +2,9 @@ const statusBox = document.querySelector('#status');
 const viewer = document.querySelector('#viewer');
 const previewDescription = document.querySelector('#preview-description');
 const generateButton = document.querySelector('#generate-btn');
+const fontInput = document.querySelector('#font');
+const glyphInputs = ['x', 'y', 'z'].map((axis) => document.querySelector(`#glyph-${axis}`));
+const partsWarning = document.querySelector('#parts-warning');
 const sizeInput = document.querySelector('#size');
 const projectionButton = document.querySelector('#projection');
 const viewButtons = document.querySelectorAll('[data-view]');
@@ -91,18 +94,44 @@ async function initializeViewer() {
   return true;
 }
 
+function setGenerationLocked(locked) {
+  generateButton.disabled = locked;
+  fontInput.disabled = locked;
+}
+
+async function readFont(file) {
+  if (file) {
+    const extension = file.name.split('.').pop().toLowerCase();
+    if (!/\.(ttf|otf)$/i.test(file.name)) {
+      throw new Error('拡張子が .ttf または .otf のフォントを選択してください。');
+    }
+    return { fontBuffer: await file.arrayBuffer(), fontKind: extension };
+  }
+
+  try {
+    const response = await fetch('./fonts/default.ttf');
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return { fontBuffer: await response.arrayBuffer(), fontKind: 'default' };
+  } catch (error) {
+    throw new Error(
+      'デフォルトフォント（fonts/default.ttf）が見つかりません。フォントファイルを選択するか、fonts/default.ttf を配置してください',
+      { cause: error },
+    );
+  }
+}
+
+const viewerReady = initializeViewer();
+let worker = null;
+
 function initializeWorker() {
-  const viewerReady = initializeViewer();
-  let worker;
-  let workerReady = false;
-  let size;
+  setGenerationLocked(true);
+  statusBox.textContent = 'Pyodide を読み込み中...';
 
   function failWorker(message) {
-    workerReady = false;
-    generateButton.disabled = true;
-    statusBox.textContent = message;
     worker?.terminate();
     worker = null;
+    statusBox.textContent = message;
+    setGenerationLocked(false);
   }
 
   try {
@@ -112,20 +141,26 @@ function initializeWorker() {
     return;
   }
 
-  worker.addEventListener('error', (event) => {
-    failWorker(`Worker の実行に失敗しました。 ${event.message}`);
+  const activeWorker = worker;
+  activeWorker.addEventListener('error', (event) => {
+    if (worker === activeWorker) failWorker(`Worker の実行に失敗しました。 ${event.message}`);
   });
 
-  worker.addEventListener('message', async ({ data }) => {
+  activeWorker.addEventListener('message', async ({ data }) => {
+    if (worker !== activeWorker) return;
     if (data.type === 'status') {
       if (data.status === 'error') {
         failWorker(data.message);
         return;
       }
-      if (!(await viewerReady) || !worker) return;
-      statusBox.textContent = data.message;
-      workerReady = data.status === 'ready';
-      generateButton.disabled = !workerReady;
+      if (data.status === 'ready') {
+        const ready = await viewerReady;
+        if (worker !== activeWorker) return;
+        statusBox.textContent = ready ? data.message : 'プレビューの表示に失敗しました。';
+        setGenerationLocked(false);
+      } else {
+        statusBox.textContent = data.message;
+      }
       return;
     }
 
@@ -134,24 +169,47 @@ function initializeWorker() {
         statusBox.textContent = data.message;
       } else if (data.type === 'result') {
         await renderFigure(JSON.parse(data.figureJson));
-        previewDescription.textContent = `一辺 ${size} mm のブロックです。Z 軸方向に直径 ${size / 2} mm の貫通穴があります。`;
-        statusBox.textContent = 'テスト立体を表示しました。';
+        const [x, y, z] = data.chars;
+        previewDescription.textContent = `基準サイズ ${data.size} mm。X軸は「${x}」、Y軸は「${y}」、Z軸は「${z}」です。`;
+        const hasMultipleParts = data.solidsCount > 1;
+        partsWarning.textContent = hasMultipleParts
+          ? `立体が ${data.solidsCount} 個のパーツに分断されています。太字のフォントや別の文字の組み合わせを試してください`
+          : '';
+        partsWarning.hidden = !hasMultipleParts;
+        statusBox.textContent = '立体を表示しました。';
       }
     } catch (error) {
-      statusBox.textContent = 'テスト立体の表示に失敗しました。';
+      statusBox.textContent = '立体の表示に失敗しました。';
       console.error(error);
     } finally {
-      generateButton.disabled = !workerReady;
+      if (worker === activeWorker) setGenerationLocked(false);
     }
   });
-
-  generateButton.addEventListener('click', () => {
-    if (!workerReady || generateButton.disabled || !sizeInput.reportValidity()) return;
-    size = sizeInput.valueAsNumber;
-    generateButton.disabled = true;
-    statusBox.textContent = 'CAD ジオメトリを計算中...';
-    worker.postMessage({ type: 'generate', payload: { size } });
-  });
 }
+
+generateButton.addEventListener('click', async () => {
+  if (generateButton.disabled || !sizeInput.reportValidity()) return;
+  if (!worker) {
+    initializeWorker();
+    return;
+  }
+
+  const activeWorker = worker;
+  const size = sizeInput.valueAsNumber;
+  const glyphs = glyphInputs.map((input) => input.value);
+  setGenerationLocked(true);
+  statusBox.textContent = 'フォントを読み込み中...';
+
+  try {
+    const { fontBuffer, fontKind } = await readFont(fontInput.files[0]);
+    if (worker !== activeWorker) return;
+    statusBox.textContent = 'CAD ジオメトリを計算中...';
+    activeWorker.postMessage({ type: 'generate', payload: { size, glyphs, fontBuffer, fontKind } }, [fontBuffer]);
+  } catch (error) {
+    if (worker !== activeWorker) return;
+    statusBox.textContent = error.message;
+    setGenerationLocked(false);
+  }
+});
 
 initializeWorker();
