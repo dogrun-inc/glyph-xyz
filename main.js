@@ -2,6 +2,8 @@ const statusBox = document.querySelector('#status');
 const viewer = document.querySelector('#viewer');
 const previewDescription = document.querySelector('#preview-description');
 const generateButton = document.querySelector('#generate-btn');
+const stlButton = document.querySelector('#download-stl');
+const stepButton = document.querySelector('#download-step');
 const fontInput = document.querySelector('#font');
 const glyphInputs = ['x', 'y', 'z'].map((axis) => document.querySelector(`#glyph-${axis}`));
 const partsWarning = document.querySelector('#parts-warning');
@@ -18,6 +20,37 @@ const views = {
 };
 
 let projection = 'orthographic';
+let stlData;
+let stepData;
+let exportName;
+
+function setExportData(result) {
+  stlData = result?.stlData;
+  stepData = result?.stepData;
+  exportName = result?.chars.join('').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
+  stlButton.disabled = !stlData?.byteLength;
+  stepButton.disabled = !stepData?.byteLength;
+}
+
+function downloadExport(data, extension, type) {
+  if (!data?.byteLength) return;
+
+  const url = URL.createObjectURL(new Blob([data], { type }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `glyph-xyz_${exportName}.${extension}`;
+  document.body.append(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+}
+
+stlButton.addEventListener('click', () => downloadExport(stlData, 'stl', 'application/sla'));
+stepButton.addEventListener('click', () => downloadExport(stepData, 'step', 'application/step'));
+setExportData();
 
 function renderFigure({ data, layout }) {
   const scene = layout.scene;
@@ -128,6 +161,7 @@ function initializeWorker() {
   statusBox.textContent = 'Pyodide を読み込み中...';
 
   function failWorker(message) {
+    setExportData();
     worker?.terminate();
     worker = null;
     statusBox.textContent = message;
@@ -166,9 +200,11 @@ function initializeWorker() {
 
     try {
       if (data.type === 'error') {
+        setExportData();
         statusBox.textContent = data.message;
       } else if (data.type === 'result') {
         await renderFigure(JSON.parse(data.figureJson));
+        if (worker !== activeWorker) return;
         const [x, y, z] = data.chars;
         previewDescription.textContent = `基準サイズ ${data.size} mm。X軸は「${x}」、Y軸は「${y}」、Z軸は「${z}」です。`;
         const hasMultipleParts = data.solidsCount > 1;
@@ -176,9 +212,11 @@ function initializeWorker() {
           ? `立体が ${data.solidsCount} 個のパーツに分断されています。太字のフォントや別の文字の組み合わせを試してください`
           : '';
         partsWarning.hidden = !hasMultipleParts;
+        setExportData(data);
         statusBox.textContent = '立体を表示しました。';
       }
     } catch (error) {
+      setExportData();
       statusBox.textContent = '立体の表示に失敗しました。';
       console.error(error);
     } finally {
@@ -197,6 +235,7 @@ generateButton.addEventListener('click', async () => {
   const activeWorker = worker;
   const size = sizeInput.valueAsNumber;
   const glyphs = glyphInputs.map((input) => input.value);
+  setExportData();
   setGenerationLocked(true);
   statusBox.textContent = 'フォントを読み込み中...';
 

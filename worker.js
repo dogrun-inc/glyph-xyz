@@ -2,6 +2,8 @@ let pyodide;
 let pathKitReady;
 let generating = false;
 const pathKitUrl = 'https://cdn.jsdelivr.net/npm/pathkit-wasm@1.0.0/bin/';
+const stlPath = '/tmp/model.stl';
+const stepPath = '/tmp/model.step';
 
 async function simplifyGlyphOutline(svgPath) {
   pathKitReady ??= Promise.resolve().then(() => {
@@ -46,6 +48,7 @@ micropip.add_mock_package(
 )
 await micropip.install(["build123d==0.11.0", "sqlite3"])
 from build123d import Align, Plane, Sketch, Text, extrude, import_svg, scale
+from build123d import export_step, export_stl
 `);
 
     self.postMessage({ type: 'status', status: 'loading', message: 'plotly をインストール中...' });
@@ -123,7 +126,7 @@ def glyph_prism(char, size, txt, plane):
         raise ValueError(f"文字「{char}」を押し出して有効な立体を生成できませんでした。")
     return prism
 
-async def generate_figure(size, x_char, y_char, z_char, font_path):
+async def generate_figure(size, x_char, y_char, z_char, font_path, stl_path, step_path):
     chars = (x_char, y_char, z_char)
     with TTFont(font_path) as font:
         cmap = font.getBestCmap() or {}
@@ -165,6 +168,15 @@ async def generate_figure(size, x_char, y_char, z_char, font_path):
         paper_bgcolor="#eef2f7",
         template=None,
     )
+    for format_name, export, path in (
+        ("STL", export_stl, stl_path),
+        ("STEP", export_step, step_path),
+    ):
+        try:
+            if not export(result, path):
+                raise RuntimeError("ファイルを書き込めませんでした。")
+        except Exception as error:
+            raise RuntimeError(f"{format_name} の書き出しに失敗しました: {error}") from error
     return json.dumps({"figureJson": fig.to_json(), "solidsCount": solids_count})
 `);
     runtime.FS.mkdir('/fonts');
@@ -200,15 +212,23 @@ self.addEventListener('message', async ({ data }) => {
 
     const generateFigure = pyodide.globals.get('generate_figure');
     try {
-      const result = await generateFigure(size, ...chars, fontPath);
+      const result = await generateFigure(size, ...chars, fontPath, stlPath, stepPath);
       const { error, figureJson, solidsCount } = JSON.parse(result);
       if (error) {
         self.postMessage({ type: 'error', message: error });
       } else {
-        self.postMessage({ type: 'result', figureJson, solidsCount, chars, size });
+        const stlData = pyodide.FS.readFile(stlPath);
+        const stepData = pyodide.FS.readFile(stepPath);
+        self.postMessage(
+          { type: 'result', figureJson, solidsCount, chars, size, stlData, stepData },
+          [stlData.buffer, stepData.buffer],
+        );
       }
     } finally {
       generateFigure.destroy();
+      for (const path of [stlPath, stepPath]) {
+        if (pyodide.FS.analyzePath(path).exists) pyodide.FS.unlink(path);
+      }
     }
   } catch (error) {
     self.postMessage({ type: 'error', message: `立体の生成に失敗しました。 ${error.message}` });
